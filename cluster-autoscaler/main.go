@@ -131,6 +131,7 @@ var (
 	maxAutoprovisionedNodeGroupCount = flag.Int("max-autoprovisioned-node-group-count", 15, "The maximum number of autoprovisioned groups in the cluster.")
 
 	expendablePodsPriorityCutoff = flag.Int("expendable-pods-priority-cutoff", 0, "Pods with priority below cutoff will be expendable. They can be killed without any consideration during scale down and they don't cause scale up. Pods with null priority (PodPriority disabled) are non expendable.")
+	customScheduler					 = flag.String("custom-scheduler", "", "CustomScheduler endpoint, disabled if not configured")
 )
 
 func createAutoscalerOptions() core.AutoscalerOptions {
@@ -180,6 +181,7 @@ func createAutoscalerOptions() core.AutoscalerOptions {
 		NodeAutoprovisioningEnabled:      *nodeAutoprovisioningEnabled,
 		MaxAutoprovisionedNodeGroupCount: *maxAutoprovisionedNodeGroupCount,
 		ExpendablePodsPriorityCutoff:     *expendablePodsPriorityCutoff,
+		CustomScheduler:				  *customScheduler,
 	}
 
 	configFetcherOpts := dynamic.ConfigFetcherOptions{
@@ -240,7 +242,14 @@ func run(healthCheck *metrics.HealthCheck) {
 	kubeClient := createKubeClient()
 	kubeEventRecorder := kube_util.CreateEventRecorder(kubeClient)
 	opts := createAutoscalerOptions()
-	metrics.UpdateNapEnabled(opts.NodeAutoprovisioningEnabled)
+
+	// Enable CustomScheduler support
+	if opts.CustomScheduler != "" {
+		os.Setenv("custom_scheduler", opts.CustomScheduler)
+		glog.V(1).Info("=============custom_scheduler enable===========")
+	}
+
+ 	metrics.UpdateNapEnabled(opts.NodeAutoprovisioningEnabled)
 	predicateCheckerStopChannel := make(chan struct{})
 	predicateChecker, err := simulator.NewPredicateChecker(kubeClient, predicateCheckerStopChannel)
 	if err != nil {

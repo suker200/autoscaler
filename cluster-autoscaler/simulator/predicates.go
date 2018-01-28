@@ -34,6 +34,11 @@ import (
 	_ "k8s.io/kubernetes/plugin/pkg/scheduler/algorithmprovider"
 
 	"github.com/golang/glog"
+	"net/http"
+	"encoding/json"
+	"io/ioutil"
+	"time"
+	"os"
 )
 
 // ErrorVerbosity defines the verbosity of error messages returned by PredicateChecker
@@ -197,6 +202,52 @@ func (p *PredicateChecker) FitsAny(pod *apiv1.Pod, nodeInfos map[string]*schedul
 	return "", fmt.Errorf("cannot put pod %s on any node", pod.Name)
 }
 
+type DATAPOST struct {
+	Pod *apiv1.Pod `json:"pod"`
+	Node string `json:"node"`
+}
+
+func customScheduler(pod *apiv1.Pod, nodeName, customSchedulerEndpoint string) error {
+	var data = &DATAPOST{Pod: pod, Node: nodeName} 
+	dataJson, err := json.Marshal(data)
+
+	if err != nil {
+		fmt.Println("marshal data for customScheduler failed")
+	}
+
+	url := customSchedulerEndpoint // "http://extender.kube-system.svc.cluster.local:12345/v1/ca"
+
+    req, err := http.NewRequest("POST", url, bytes.NewBuffer(dataJson))
+    req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{
+		Timeout: time.Duration(10 * time.Second),
+	}
+
+    resp, err := client.Do(req)
+
+    if err != nil {
+		// Case customScheduler endpoint failed. Should support failover. Currently, 
+		// return nil --> disable customScheduler until it back    	
+        fmt.Println("[customScheduler] Error: " + err.Error())
+        return nil
+    } else {
+        defer resp.Body.Close()
+        body, err := ioutil.ReadAll(resp.Body)
+        if err != nil {
+                // panic(err)
+                fmt.Println("[customScheduler] Error: " + err.Error())
+        } else {
+        	fmt.Println(string(body[:]))
+        	if string(body[:])  == "false" {
+        		return errors.New("false")
+        	}
+        }
+    }
+
+    return nil
+}
+
 // CheckPredicates checks if the given pod can be placed on the given node.
 // We're running a ton of predicates and more often than not we only care whether
 // they pass or not and don't care for a reason. Turns out formatting nice error
@@ -207,6 +258,7 @@ func (p *PredicateChecker) FitsAny(pod *apiv1.Pod, nodeInfos map[string]*schedul
 // performance gains of CheckPredicates won't always offset the cost of GetPredicateMetadata.
 // Alternatively you can pass nil as predicateMetadata.
 func (p *PredicateChecker) CheckPredicates(pod *apiv1.Pod, predicateMetadata algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo, verbosity ErrorVerbosity) error {
+	glog.V(1).Info("=========Enter CheckPredicates=========")
 	for _, predInfo := range p.predicates {
 
 		// skip affinity predicate if it has been disabled
@@ -240,5 +292,13 @@ func (p *PredicateChecker) CheckPredicates(pod *apiv1.Pod, predicateMetadata alg
 				pod.Name, nodename, buffer.String())
 		}
 	}
+
+
+	if os.Getenv("custom_scheduler") != "" {
+		return customScheduler(pod, nodeInfo.Node().Name, os.Getenv("custom_scheduler"))
+	} else{
+		glog.V(1).Info("Do not enter custom_scheduler")
+	}
+
 	return nil
 }

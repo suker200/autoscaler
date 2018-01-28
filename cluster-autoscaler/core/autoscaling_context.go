@@ -132,6 +132,8 @@ type AutoscalingOptions struct {
 	// Pods with priority below cutoff are expendable. They can be killed without any consideration during scale down and they don't cause scale up.
 	// Pods with null priority (PodPriority disabled) are non expendable.
 	ExpendablePodsPriorityCutoff int
+	// Support CustomScheduler
+	CustomScheduler string
 }
 
 // NewAutoscalingContext returns an autoscaling context from all the necessary parameters passed via arguments
