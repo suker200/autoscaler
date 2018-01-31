@@ -295,9 +295,8 @@ func (p *PredicateChecker) CheckPredicates(pod *apiv1.Pod, predicateMetadata alg
 
 
 	if os.Getenv("custom_scheduler") != "" {
-		if nodeInfo.Node().Name != "" {
-			return customScheduler(pod, nodeInfo.Node().Name, os.Getenv("custom_scheduler"))	
-		}
+		fmt.Println(nodeInfo.Node())
+		return customScheduler(pod, nodeInfo.Node().Name, os.Getenv("custom_scheduler"))	
 	} else{
 		glog.V(1).Info("Do not enter custom_scheduler")
 	}
